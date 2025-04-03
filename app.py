@@ -1,4 +1,5 @@
 from flask import Flask, request, render_template
+from werkzeug.security import check_password_hash
 
 app = Flask(__name__)
 
@@ -40,6 +41,54 @@ def login():
         conn.close()
 
     return render_template('login.html')
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        name = request.form['name']
+        email = request.form['email']
+        number = request.form['number']
+        
+        otp = generate_otp()
+        otp_data[email] = {'otp': otp, 'timestamp': datetime.now()}
+
+        send_email_otp(email, otp)
+
+        flash(f'OTP sent to {email}. Please verify your OTP.', 'success')
+
+        # Store temporary user data before OTP verification
+        session['temp_user'] = {'name': name, 'email': email, 'number': number}
+
+        return redirect(url_for('verify_otp'))
+
+    return render_template('register.html')
+    
+@app.route('/reset-password', methods=['GET', 'POST'])
+def reset_password():
+    if request.method == 'POST':
+        new_password = request.form['new_password']
+        confirm_password = request.form['confirm_password']
+
+        if new_password == confirm_password:
+            hashed_password = generate_password_hash(new_password)
+
+            email = session.get('temp_email')
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('UPDATE users SET password = %s WHERE email = %s', (hashed_password, email))
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+            flash('Your password has been successfully reset. You can now log in.', 'success')
+            session.pop('temp_email', None) 
+            return redirect(url_for('login'))
+
+        flash('Passwords do not match. Please try again.', 'danger')
+
+    return render_template('reset_password.html')
+
+
 
 if __name__ == '__main__':
     app.run(debug=True)
