@@ -194,6 +194,46 @@ def reset_password():
     return render_template('reset_password.html')
 
 
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        email = request.form['email']
+
+        otp = generate_otp()
+        otp_data[email] = {'otp': otp, 'timestamp': datetime.now()}
+
+        send_email_otp(email, otp)
+
+        flash(f'OTP sent to {email}. Please verify your OTP to reset your password.', 'success')
+
+        session['temp_email'] = email
+
+        return redirect(url_for('verify_forgot_otp'))
+
+    return render_template('forgot_password.html')
+
+@app.route('/verify-forgot-otp', methods=['GET', 'POST'])
+def verify_forgot_otp():
+    if request.method == 'POST':
+        entered_otp = request.form['otp']
+        email = session.get('temp_email')
+
+        if email in otp_data:
+            stored_otp = otp_data[email]['otp']
+            otp_time = otp_data[email]['timestamp']
+
+            if entered_otp == stored_otp and (datetime.now() - otp_time).seconds <= 300:
+                flash('OTP verified successfully. Please create a new password.', 'success')
+                return redirect(url_for('reset_password'))
+
+            flash('Invalid or expired OTP. Please try again.', 'danger')
+        else:
+            flash('OTP not found. Please try again.', 'danger')
+
+    return render_template('verify_forgot_otp.html')
+
+
+
 
 if __name__ == '__main__':
     initialize_database()
