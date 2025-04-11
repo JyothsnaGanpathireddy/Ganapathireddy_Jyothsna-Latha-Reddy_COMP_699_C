@@ -233,6 +233,35 @@ def verify_forgot_otp():
     return render_template('verify_forgot_otp.html')
 
 
+@app.route('/admin')
+def admin_dashboard():
+    # Create a connection to the database
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Query to fetch total users
+    cursor.execute("SELECT COUNT(*) FROM users")
+    total_users = cursor.fetchone()[0]
+
+    # Query to fetch total orders
+    cursor.execute("SELECT COUNT(*) FROM orders")
+    total_orders = cursor.fetchone()[0]
+
+    # Query to fetch total inventory items
+    cursor.execute("SELECT COUNT(*) FROM inventory")
+    total_inventory = cursor.fetchone()[0]
+
+    # Close the cursor and connection
+    cursor.close()
+    conn.close()
+
+    # Pass the results to the template
+    return render_template('admin_dashboard.html', 
+                           total_users=total_users, 
+                           total_orders=total_orders, 
+                           total_inventory=total_inventory)
+
+
 
 
 if __name__ == '__main__':
