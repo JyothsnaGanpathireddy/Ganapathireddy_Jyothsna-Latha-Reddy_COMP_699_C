@@ -1,5 +1,5 @@
 from flask import Flask, request, render_template
-from werkzeug.security import check_password_hash
+from werkzeug.security import generate_password_hash, check_password_hash
 import mysql.connector
 
 
@@ -260,6 +260,112 @@ def admin_dashboard():
                            total_users=total_users, 
                            total_orders=total_orders, 
                            total_inventory=total_inventory)
+
+@app.route('/users')
+def users():
+    users = get_all_users()  # Get all users
+    return render_template('users.html', users=users)
+
+def get_all_users():
+    conn = get_db_connection()  # Using the connection function you already have
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM users")  # Replace "users" with your actual table name
+    users = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return users
+
+@app.route('/edit_user/<int:user_id>', methods=['GET', 'POST'])
+def edit_user(user_id):
+    user = get_user_by_id(user_id)  # Fetch user by ID
+    print(user)  # Check what is returned from the database
+    if request.method == 'POST':
+        # Get user data from form and update
+        user_data = {
+            'name': request.form['name'],
+            'email': request.form['email'],
+            'number': request.form['number']
+        }
+        update_user(user_id, user_data)  # Call the update function
+        return redirect(url_for('users'))  # Redirect back to the user list
+    return render_template('edit_user.html', user=user)  # Render the edit form
+
+def get_user_by_id(user_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+    user = cursor.fetchone()  # Fetch one record
+    cursor.close()
+    conn.close()
+    return user  # Ensure this is a dictionary or a result set containing 'user_id'
+
+def update_user(user_id, user_data):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Assuming user_data is a dictionary containing the user info to update
+    update_query = """
+    UPDATE users 
+    SET name = %s, email = %s, number = %s
+    WHERE id = %s
+    """
+    cursor.execute(update_query, (user_data['name'], user_data['email'], user_data['number'], user_id))
+    conn.commit()  # Commit the changes
+    cursor.close()
+    conn.close()
+
+@app.route('/create-password', methods=['GET', 'POST'])
+def create_password():
+    if request.method == 'POST':
+        password = request.form['password']
+        confirm_password = request.form['confirm_password']
+
+        # Check if passwords match
+        if password != confirm_password:
+            flash('Passwords do not match. Please try again.', 'danger')
+            return render_template('create_password.html')
+
+        temp_user = session.pop('temp_user', None)
+        if temp_user:
+            hashed_password = generate_password_hash(password)
+            conn = get_db_connection()
+            cursor = conn.cursor(dictionary=True)  # Using dictionary=True
+
+            try:
+                # Check if email already exists
+                cursor.execute("SELECT * FROM users WHERE email = %s", (temp_user['email'],))
+                if cursor.fetchone():
+                    flash('Email already exists. Please use a different email or log in.', 'danger')
+                    return render_template('create_password.html')
+
+                # Check if phone number already exists
+                cursor.execute("SELECT * FROM users WHERE number = %s", (temp_user['number'],))
+                if cursor.fetchone():
+                    flash('Phone number already exists. Please use a different number.', 'danger')
+                    return render_template('create_password.html')
+
+                # Insert new user into the database
+                cursor.execute(
+                    'INSERT INTO users (name, email, number, password) VALUES (%s, %s, %s, %s)',
+                    (temp_user['name'], temp_user['email'], temp_user['number'], hashed_password)
+                )
+                conn.commit()
+                flash('Registration successful. Please login.', 'success')
+                return redirect(url_for('login'))
+
+            except mysql.connector.Error as e:
+                flash('Database error occurred. Please try again.', 'danger')
+                print(f"MySQL Error: {e}")
+
+            except Exception as e:
+                flash('An unexpected error occurred. Please try again.', 'danger')
+                print(f"Exception: {e}")
+
+            finally:
+                cursor.close()
+                conn.close()
+
+    return render_template('create_password.html')
 
 
 
