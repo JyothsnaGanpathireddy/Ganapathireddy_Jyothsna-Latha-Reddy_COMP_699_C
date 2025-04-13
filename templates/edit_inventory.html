@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Inventory</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #d9f1cb;
+        }
+
+        .navbar {
+            background-color: #343a40;
+            padding: 15px 20px;
+        }
+
+        .navbar-brand {
+            color: white;
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+
+        .logout-btn {
+            color: white;
+            text-decoration: none;
+            font-size: 1.1rem;
+            margin-left: auto;
+        }
+
+        .logout-btn:hover {
+            color: #f8d7da;
+        }
+
+        .sidebar {
+            width: 250px;
+            position: fixed;
+            top: 0;
+            left: -250px;
+            height: 100vh;
+            background: #343a40;
+            color: white;
+            transition: 0.3s;
+            padding-top: 30px;
+            padding-left: 20px;
+            z-index: 999;
+        }
+
+        .sidebar a {
+            display: block;
+            padding: 12px 20px;
+            color: white;
+            text-decoration: none;
+            font-size: 1.2rem;
+        }
+
+        .sidebar a:hover {
+            background-color: #6c757d;
+        }
+
+        .sidebar.active {
+            left: 0;
+        }
+
+        .toggle-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+        }
+
+        .content {
+            margin-left: 0;
+            transition: margin-left 0.3s;
+            padding: 30px;
+            padding-top: 90px;
+        }
+
+        .content.shifted {
+            margin-left: 250px;
+        }
+
+        .edit-form-container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            max-width: 800px;
+            margin: auto;
+        }
+
+        .form-label {
+            font-weight: bold;
+            color: #495057;
+        }
+
+        .form-control {
+            border-radius: 8px;
+            border: 1px solid #ced4da;
+            box-shadow: none;
+            margin-bottom: 20px;
+        }
+
+        .form-control:focus {
+            border-color: #80bdff;
+            box-shadow: 0 0 0 0.2rem rgba(38, 143, 255, 0.25);
+        }
+
+        .btn-primary {
+            background-color: #0069d9;
+            border-color: #0062cc;
+            font-size: 1.1rem;
+            padding: 10px 20px;
+            border-radius: 8px;
+        }
+
+        .btn-primary:hover {
+            background-color: #0056b3;
+            border-color: #004085;
+        }
+
+        .form-img-container {
+            margin-bottom: 20px;
+        }
+
+        .form-img-container img {
+            max-width: 100px;
+            max-height: 100px;
+            object-fit: cover;
+            border-radius: 5px;
+        }
+
+        .sidebar a.active {
+            background-color: #007bff;
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 200px;
+            }
+
+            .content.shifted {
+                margin-left: 200px;
+            }
+
+            .edit-form-container {
+                width: 90%;
+                margin: 20px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <button class="toggle-btn" id="toggleSidebar">☰</button>
+        <a class="navbar-brand" href="#">Admin Dashboard</a>
+        <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+    </nav>
+
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+        <a href="{{ url_for('admin_dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('inventory') }}">Inventory</a>
+    </div>
+
+    <!-- Content -->
+    <div class="content" id="content">
+        <div class="edit-form-container">
+            <h2 class="text-center mb-4">Edit Inventory Item</h2>
+            <form action="/inventory/edit/{{ item[0] }}" method="POST" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="name" class="form-label">Name</label>
+                    <input type="text" class="form-control" name="name" id="name" value="{{ item[1] }}" required>
+                </div>
+                <div class="mb-3">
+                    <label for="category" class="form-label">Category</label>
+                    <input type="text" class="form-control" name="category" id="category" value="{{ item[2] }}" required>
+                </div>
+                <div class="mb-3">
+                    <label for="price" class="form-label">Price (₹)</label>
+                    <input type="number" class="form-control" name="price" id="price" value="{{ item[3] }}" required>
+                </div>
+                <div class="mb-3">
+                    <label for="description" class="form-label">Description</label>
+                    <textarea class="form-control" name="description" id="description" rows="4" required>{{ item[5] }}</textarea>
+                </div>
+                <div class="mb-3 form-img-container">
+                    <label for="image" class="form-label">Upload New Image</label>
+                    <div>
+                        <img src="{{ url_for('static', filename=item[4]) }}" alt="Current Image">
+                    </div>
+                    <input type="file" class="form-control" name="image" id="image">
+                </div>
+                <button type="submit" class="btn btn-primary">Update Item</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toggle Sidebar Script -->
+    <script>
+        $(document).ready(function () {
+            $("#toggleSidebar").click(function () {
+                $("#sidebar").toggleClass("active");
+                $("#content").toggleClass("shifted");
+            });
+        });
+    </script>
+</body>
+
+</html>

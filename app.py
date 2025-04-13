@@ -1,7 +1,7 @@
-from flask import Flask, request, render_template
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 import mysql.connector
-
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
@@ -167,6 +167,11 @@ def register():
         return redirect(url_for('verify_otp'))
 
     return render_template('register.html')
+
+def generate_otp(length=6):
+    characters = string.digits  
+    otp = ''.join(random.choice(characters) for i in range(length))
+    return otp
 
 @app.route('/reset-password', methods=['GET', 'POST'])
 def reset_password():
@@ -367,8 +372,126 @@ def create_password():
 
     return render_template('create_password.html')
 
+@app.route('/inventory', methods=['GET', 'POST'])
+def inventory():
+    if 'email' not in session:
+        return redirect(url_for('login'))
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM inventory')  # Fetching all items from inventory
+    items = cursor.fetchall()  # Storing the fetched items in a variable
+    conn.close()
+    
+    return render_template('inventory.html', inventory_items=items)
 
+@app.route('/inventory/list')
+def inventory_list():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM inventory')
+    inventory_items = cursor.fetchall()
+    conn.close()
+    return render_template('add_inventory.html')
 
+@app.route('/inventory/add', methods=['GET', 'POST'])
+def add_inventory():
+    if request.method == 'POST':
+        name = request.form['name']
+        price = request.form['price']
+        category = request.form['category']
+        description = request.form['description']  # Get description
+        image = request.files['image']
+        
+        if image and allowed_file(image.filename):
+            filename = secure_filename(image.filename)
+            image.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            image_path = 'images/' + filename
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''INSERT INTO inventory (name, price, image, category, description)
+                          VALUES (%s, %s, %s, %s, %s)''', 
+                       (name, price, image_path, category, description))  # Include description
+        conn.commit()
+        conn.close()
+
+        return redirect(url_for('inventory_list'))
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    
+@app.route('/inventory/edit/<int:id>', methods=['GET', 'POST'])
+def edit_inventory(id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT * FROM inventory WHERE id = %s', (id,))
+    item = cursor.fetchone()  # Fetch the item from the database
+
+    if not item:  # If item doesn't exist
+        return "Item not found", 404  
+
+    if request.method == 'POST':
+        price = request.form['price']
+        name = request.form['name']
+        category = request.form['category']
+        description = request.form['description']  # Get the description from the form
+
+        image = request.files['image']
+        if image and allowed_file(image.filename):
+            filename = secure_filename(image.filename)
+            image.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            image_path = 'images/' + filename  
+        else:
+            image_path = item[4]  # If no new image is uploaded, keep the existing image path
+
+        # Update the inventory item with the new data, including the description
+        cursor.execute('''UPDATE inventory
+                          SET name = %s, price = %s, image = %s, category = %s, description = %s
+                          WHERE id = %s''', 
+                       (name, price, image_path, category, description, id))
+        conn.commit()
+
+        conn.close()
+
+        return redirect(url_for('inventory'))  # Redirect to inventory list page
+
+    return render_template('edit_inventory.html', item=item)  # Pass the item data to the template
+    
+def get_total_inventory():
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT COUNT(*) as total_inventory FROM inventory")
+    total_inventory = cursor.fetchone()['total_inventory']
+    cursor.close()
+    db.close()
+    return total_inventory
+
+@app.route('/inventory/delete/<int:item_id>', methods=['GET'])
+def delete_inventory(item_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Delete related wishlist entries first
+    cursor.execute("DELETE FROM wishlist WHERE product_id = %s", (item_id,))
+    
+    # Get the image path before deleting the inventory item
+    cursor.execute("SELECT image FROM inventory WHERE id = %s", (item_id,))
+    image_row = cursor.fetchone()
+    
+    if image_row:
+        image_path = os.path.join(app.config['UPLOAD_FOLDER'], image_row[0])
+        if os.path.exists(image_path):
+            os.remove(image_path)
+
+    # Delete the inventory item
+    cursor.execute("DELETE FROM inventory WHERE id = %s", (item_id,))
+    
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for('inventory_list'))
 
 if __name__ == '__main__':
     initialize_database()
