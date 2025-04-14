@@ -3,6 +3,9 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import mysql.connector
 from werkzeug.utils import secure_filename
 
+import datetime
+from datetime import datetime, date
+
 app = Flask(__name__)
 
 
@@ -492,6 +495,195 @@ def delete_inventory(item_id):
     conn.close()
 
     return redirect(url_for('inventory_list'))
+
+@app.route('/address')
+def address():
+    return render_template('address.html')
+
+
+@app.route('/contact', methods=['GET', 'POST'])
+def contact():
+    if request.method == 'POST':
+        name = request.form['name']
+        email = request.form['email']
+        message = request.form['message']
+
+        subject = "New Contact Form Submission"
+        body = f"Name: {name}\nEmail: {email}\nMessage:\n{message}"
+
+        try:
+            msg = Message(subject, recipients=["chandrumvp123@gmail.com"], body=body)
+            mail.send(msg)
+            flash('Your message has been sent successfully!', 'success')
+        except Exception as e:
+            flash(f'Error sending message: {str(e)}', 'danger')
+
+        return redirect(url_for('contact'))
+
+    return render_template('contact.html')
+
+@app.route('/edit_order/<int:order_id>', methods=['GET', 'POST'])
+def edit_order(order_id):
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+
+    if request.method == 'POST':
+        status = request.form['status']
+        delivery_date = request.form['delivery_date']
+        delivery_date = datetime.strptime(delivery_date, '%Y-%m-%dT%H:%M')
+
+        # Update the order in the database
+        cursor.execute("""
+            UPDATE orders 
+            SET status = %s, delivery_date = %s 
+            WHERE order_id = %s
+        """, (status, delivery_date, order_id))
+        connection.commit()
+
+        # If status is 'Delivered', send an email notification
+        if status.lower() == 'delivered':
+            cursor.execute("""
+                SELECT u.email, u.name, p.name AS product_name, o.order_id
+                FROM orders o
+                JOIN users u ON o.user_id = u.id
+                JOIN inventory p ON o.product_id = p.id
+                WHERE o.order_id = %s
+            """, (order_id,))
+            
+            order_info = cursor.fetchone()
+            if order_info:
+                send_delivery_email(order_info['email'], order_info['name'], order_info['product_name'], order_info['order_id'])
+
+        flash('Order updated successfully!', 'success')
+        return redirect(url_for('order_list'))
+
+    # Fetch order details for editing
+    cursor.execute("SELECT * FROM orders WHERE order_id = %s", (order_id,))
+    order = cursor.fetchone()
+
+    cursor.close()
+    connection.close()
+
+    return render_template('edit_order.html', order=order)
+
+@app.route('/myorder')
+def myorder():
+    if 'email' not in session:
+        return redirect(url_for('login'))
+    
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+    user_id = session.get('user_id')
+    
+    print(f"Fetching orders for user ID: {user_id}")
+
+    # Fetch the user's email from the database
+    cursor.execute("SELECT email FROM users WHERE id = %s", (user_id,))
+    user_data = cursor.fetchone()
+    
+    if not user_data:
+        flash('User not found!', 'danger')
+        return redirect(url_for('index'))
+    
+    user_email = user_data['email']
+    print(f"User email from database: {user_email}")
+
+    # Fetching order details with product and status information
+    cursor.execute("""
+        SELECT 
+            o.order_id,
+            o.quantity,
+            o.total_amount,
+            o.sale_date,
+            o.delivery_date,
+            o.status,
+            o.address,
+            o.product_id,
+            i.name AS product_name,
+            i.price AS product_price,
+            i.image AS product_image
+        FROM orders o
+        JOIN inventory i ON o.product_id = i.id
+        WHERE o.user_id = %s
+        ORDER BY o.sale_date DESC
+    """, (user_id,))
+
+    orders = cursor.fetchall()
+    print("Fetched orders from DB:", orders)
+
+    # Check if there are any orders before sending an email
+    if orders:
+        # Check if the latest order is newly placed
+        latest_order = orders[0]
+        if latest_order['status'] == 'Pending':  # Only send email for new orders
+            product_name = latest_order['product_name']
+            sale_date = latest_order['sale_date']
+            
+            # Send a confirmation email to the user's email from the database
+            try:
+                msg = Message('Order Confirmation - Fresh Groceries',
+                              recipients=[user_email])  # Email fetched from the database
+                msg.body = f"""
+                Dear Customer,
+
+                Your order for '{product_name}' placed on {sale_date} has been successfully processed.
+                You will receive your order shortly.
+
+                Thank you for shopping with us!
+
+                Regards,
+                Fresh Groceries Team
+                """
+                mail.send(msg)
+                flash('Order confirmation email sent successfully!', 'success')
+            except Exception as e:
+                print("Error sending email:", e)
+                flash('Failed to send order confirmation email.', 'danger')
+    else:
+        flash('No orders found.', 'info')  # Show a message when there are no orders
+
+    cursor.close()
+    db.close()
+
+    return render_template('myorder.html', orders=orders)
+
+
+@app.route('/user_order_list')
+def order_list():
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        # Fetch orders with product and user names
+        cursor.execute("""
+            SELECT 
+                o.order_id, 
+                u.name AS user_name, 
+                p.name AS product_name, 
+                o.total_amount, 
+                o.status 
+            FROM orders o
+            JOIN users u ON o.user_id = u.id
+            JOIN inventory p ON o.product_id = p.id
+        """)
+        
+        orders = cursor.fetchall()
+        if not orders:
+            print("No orders found.")
+        else:
+            print("Fetched Orders:", orders)
+
+        return render_template('order_list.html', orders=orders)
+
+    except Exception as e:
+        print(f"Error fetching orders: {e}")
+        return "An error occurred while fetching orders.", 500
+
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
 
 if __name__ == '__main__':
     initialize_database()
