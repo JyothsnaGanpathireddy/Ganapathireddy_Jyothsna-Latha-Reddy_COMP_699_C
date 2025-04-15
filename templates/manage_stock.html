@@ -1,0 +1,103 @@
+<!-- templates/manage_stock.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Stock</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            text-align: center;
+            margin: 20px;
+        }
+        h2 {
+            color: #333;
+        }
+        table {
+            width: 80%;
+            margin: 20px auto;
+            border-collapse: collapse;
+            background: white;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #007BFF;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+        form {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        input[type="number"] {
+            width: 60px;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        button:hover {
+            background: #218838;
+        }
+        .back-button {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 10px 20px;
+            background: #dc3545;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        .back-button:hover {
+            background: #c82333;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Manage Stock</h2>
+    
+    <table>
+        <tr>
+            <th>Product</th>
+            <th>Current Stock</th>
+            <th>Update Stock</th>
+        </tr>
+        {% for product in products %}
+        <tr>
+            <td>{{ product['product_name'] }}</td>
+            <td>{{ product['stock'] }}</td>
+            <td>
+                <form action="{{ url_for('update_stock') }}" method="POST">
+                    <input type="hidden" name="product_id" value="{{ product['id'] }}">
+                    <input type="number" name="new_stock" min="0" required>
+                    <button type="submit">Update</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <a href="{{ url_for('admin_dashboard') }}" class="back-button">Back to Dashboard</a>
+
+</body>
+
+</html>

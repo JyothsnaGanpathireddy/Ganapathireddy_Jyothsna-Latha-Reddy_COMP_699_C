@@ -220,6 +220,30 @@ def forgot_password():
 
     return render_template('forgot_password.html')
 
+@app.route('/verify-otp', methods=['GET', 'POST'])
+def verify_otp():
+    if request.method == 'POST':
+        entered_otp = request.form.get('otp')
+        email = session.get('temp_user', {}).get('email')  # Use email from session's temp_user
+        
+        if email and email in otp_data:
+            stored_otp = otp_data[email]['otp']
+            otp_time = otp_data[email]['timestamp']
+
+            # Check if the entered OTP matches and if the OTP is within the allowed time
+            if entered_otp == stored_otp and (datetime.now() - otp_time).seconds <= 300:  # 5 minutes window
+                flash("OTP verified successfully!", "success")
+                # Proceed to the next step (e.g., completing registration)
+                return redirect(url_for('create_password'))
+            else:
+                flash("Invalid OTP or OTP expired. Please try again.", "danger")
+        else:
+            flash("OTP not found or session expired. Please try again.", "danger")
+    
+    return render_template('verify_otp.html')
+
+
+
 @app.route('/verify-forgot-otp', methods=['GET', 'POST'])
 def verify_forgot_otp():
     if request.method == 'POST':
@@ -374,6 +398,23 @@ def create_password():
                 conn.close()
 
     return render_template('create_password.html')
+
+@app.route('/resend-otp', methods=['POST'])
+def resend_otp():
+    temp_user = session.get('temp_user')
+    if not temp_user:
+        flash('No registration in progress.', 'danger')
+        return redirect(url_for('register'))
+
+    number = temp_user['number']
+    email = temp_user['email']
+    otp = generate_otp()
+
+    otp_data[email] = {'otp': otp, 'timestamp': datetime.now()}
+    send_email_otp(email, otp)
+
+    flash(f'OTP resent to {email}.', 'success')
+    return redirect(url_for('verify_otp'))
 
 @app.route('/inventory', methods=['GET', 'POST'])
 def inventory():
@@ -684,6 +725,83 @@ def order_list():
             cursor.close()
         if connection:
             connection.close()
+
+@app.route('/profile')
+def profile():
+    if 'email' not in session:
+        return redirect(url_for('login')) 
+
+    try:
+      
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        query = "SELECT name, email, number FROM users WHERE email = %s"
+        cursor.execute(query, (session['email'],)) 
+        user = cursor.fetchone()
+
+        if not user:
+            return "User not found", 404 
+
+    except mysql.connector.Error as err:
+        print(f"Database error: {err}")
+        return "Failed to fetch user details", 500  
+
+    finally:
+      
+        if cursor:
+            cursor.close()
+        if connection and connection.is_connected():
+            connection.close()
+
+
+    return render_template('profile.html', user=user)
+
+
+
+def send_order_confirmation_email(recipient_email, order_details):
+    try:
+        msg = Message(
+            "Order Confirmation - Fresh Groceries",
+            recipients=[recipient_email]
+        )
+        msg.body = f"Your order {order_details} has been placed successfully!"
+        mail.send(msg)
+        flash("Order confirmed successfully!", "success")  # Use flash with category 'success'
+        print("Email sent successfully!")
+    except Exception as e:
+        print("Error sending email:", e)
+        flash("Failed to send order confirmation email.", "danger")
+
+@app.route('/admin/manage-stock')
+def manage_stock():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT id, name AS product_name, stock FROM inventory")
+    products = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    
+    return render_template('manage_stock.html', products=products)
+
+@app.route('/admin/update-stock', methods=['POST'])
+def update_stock():
+    product_id = request.form.get('product_id')
+    new_stock = request.form.get('new_stock')
+
+    if not product_id or not new_stock.isdigit():
+        flash('Invalid stock value', 'error')
+        return redirect(url_for('manage_stock'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE inventory SET stock = %s WHERE id = %s", (new_stock, product_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    flash('Stock updated successfully', 'success')
+    return redirect(url_for('manage_stock'))
 
 if __name__ == '__main__':
     initialize_database()
