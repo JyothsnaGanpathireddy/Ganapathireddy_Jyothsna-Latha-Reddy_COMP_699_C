@@ -1,8 +1,11 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session
 from werkzeug.security import generate_password_hash, check_password_hash
 import mysql.connector
 from werkzeug.utils import secure_filename
-
+import os
+import smtplib
+import random
+import string
 import datetime
 from datetime import datetime, date
 
@@ -802,6 +805,280 @@ def update_stock():
 
     flash('Stock updated successfully', 'success')
     return redirect(url_for('manage_stock'))
+
+@app.route('/cart')
+def cart():
+    if 'email' not in session:
+        return redirect(url_for('login'))
+    cart_items = session.get('cart', [])
+    print("Session Cart Data:", session.get('cart'))
+
+    return render_template('cart.html', cart=cart_items)
+
+@app.route('/add_to_cart/<int:product_id>', methods=['POST'])
+def add_to_cart(product_id):
+    try:
+        print(f"Attempting to add product ID: {product_id} to cart...")
+
+        if 'cart' not in session or not isinstance(session['cart'], list):
+            session['cart'] = []
+        cart = session['cart']
+
+        db = get_db_connection()
+        cursor = db.cursor(dictionary=True)
+
+        # Fetch product by ID and check stock availability
+        cursor.execute("SELECT * FROM inventory WHERE id = %s", (product_id,))
+        product = cursor.fetchone()
+
+        if not product:
+            print(f"Product ID {product_id} not found in the database.")
+            flash('Product not found!', 'danger')
+            return redirect(url_for('index'))
+
+        available_stock = product.get('stock', 0)
+        quantity = request.form.get('quantity', 1)
+
+        if not quantity or not str(quantity).isdigit():
+            print("Invalid quantity provided:", quantity)
+            flash('Invalid quantity!', 'danger')
+            return redirect(url_for('index'))
+
+        quantity = int(quantity)
+        
+        # Check if requested quantity exceeds available stock
+        if quantity > available_stock:
+            flash(f"Only {available_stock} items available in stock!", 'warning')
+            return redirect(url_for('index'))
+
+        for item in cart:
+            if item['id'] == product_id:
+                if item['quantity'] + quantity > available_stock:
+                    flash(f"Only {available_stock} items available in stock!", 'warning')
+                    return redirect(url_for('index'))
+                item['quantity'] += quantity
+                break
+        else:
+            cart.append({
+                'id': product.get('id'),
+                'name': product.get('name', product.get('product_name', 'Unknown Product')),
+                'product_name': product.get('product_name', product.get('name', 'Unknown Product')),
+                'quantity': quantity,
+                'price': product.get('price', 0.0),
+                'expiration_date': product.get('expiration_date', 'N/A'),
+                'image': product.get('image', 'default.jpg')
+            })
+
+        session['cart'] = cart
+        session.modified = True
+        print("Cart updated:", session['cart'])
+
+        flash(f"{product.get('product_name', 'Product')} added to cart!", 'success')
+        return redirect(url_for('index'))
+
+    except Exception as e:
+        print(f"An error occurred while adding to cart: {e}")
+        flash('Error adding product to cart.', 'danger')
+        return redirect(url_for('index'))
+
+@app.route('/remove_from_cart/<string:item_name>', methods=['POST'])
+def remove_from_cart(item_name):
+    try:
+        print(f"Removing item: {item_name} from cart...")
+        cart = session.get('cart', [])
+        
+        # Filter out the item by its name
+        cart = [item for item in cart if item['product_name'] != item_name]
+        
+        session['cart'] = cart
+        session.modified = True
+        flash(f"{item_name} removed from cart.", 'success')
+        return redirect(url_for('cart'))
+    
+    except Exception as e:
+        print(f"An error occurred while removing from cart: {e}")
+        flash('Error removing item from cart.', 'danger')
+        return redirect(url_for('cart'))
+
+
+@app.route('/checkout', methods=['POST'])
+def checkout():
+    if 'email' not in session:
+        return redirect(url_for('login'))
+    
+    try:
+        print("Checkout process started...")
+        
+        cart = session.get('cart', [])
+        
+        if not cart:
+            flash('Your cart is empty!', 'warning')
+            return redirect(url_for('cart'))
+        
+        address = request.form.get('address')
+        
+        if not address:
+            flash('Address is required!', 'warning')
+            return redirect(url_for('cart'))
+        
+        db = get_db_connection()
+        cursor = db.cursor(dictionary=True)
+        
+        user_id = session.get('user_id')
+        
+        for item in cart:
+            product_id = item['id']
+            quantity = item['quantity']
+            total_amount = float(item['price']) * quantity
+            
+            print(f"Processing product ID: {product_id} with quantity: {quantity}")
+            
+            cursor.execute("SELECT stock FROM inventory WHERE id = %s", (product_id,))
+            stock_data = cursor.fetchone()
+            available_stock = stock_data['stock'] if stock_data else 0
+            
+            if quantity > available_stock:
+                flash(f"Not enough stock for {item['product_name']}!", 'danger')
+                return redirect(url_for('cart'))
+            
+            cursor.execute(
+                "INSERT INTO orders (product_id, quantity, total_amount, user_id, address, status) "
+                "VALUES (%s, %s, %s, %s, %s, %s)",
+                (product_id, quantity, total_amount, user_id, address, 'Pending')
+            )
+            
+            # Reduce stock after purchase
+            cursor.execute("UPDATE inventory SET stock = stock - %s WHERE id = %s", (quantity, product_id))
+            db.commit()
+        
+        session['cart'] = []
+        session.modified = True
+        
+        flash('Checkout successful!', 'success')
+        return redirect(url_for('myorder'))
+    
+    except Exception as e:
+        print(f"An error occurred during checkout: {e}")
+        flash('Error during checkout process.', 'danger')
+        return redirect(url_for('cart'))
+
+@app.route('/sales_report')
+def sales_report():
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+
+    # 🧮 **Revenue Calculation:**  
+    cursor.execute("SELECT SUM(total_amount) AS total_revenue FROM orders WHERE status = 'Delivered'")
+    total_revenue = cursor.fetchone().get('total_revenue', 0)
+
+    # 📈 **Top-Selling Products:**  
+    cursor.execute("""
+        SELECT i.name AS product_name, SUM(o.quantity) AS total_quantity, SUM(o.total_amount) AS total_sales
+        FROM orders o
+        JOIN inventory i ON o.product_id = i.id
+        WHERE o.status = 'Delivered'
+        GROUP BY i.name
+        ORDER BY total_quantity DESC
+        LIMIT 5
+    """)
+    top_products = cursor.fetchall()
+
+    # 📅 **Order Trends (Monthly):**  
+    cursor.execute("""
+        SELECT DATE_FORMAT(sale_date, '%Y-%m') AS month, SUM(total_amount) AS monthly_sales
+        FROM orders
+        WHERE status = 'Delivered'
+        GROUP BY month
+        ORDER BY month DESC
+        LIMIT 12
+    """)
+    order_trends = cursor.fetchall()
+
+    cursor.close()
+    db.close()
+    
+
+    return render_template('sales_report.html', 
+                           total_revenue=total_revenue, 
+                           top_products=top_products, 
+                           order_trends=order_trends)
+
+@app.route('/wishlist', methods=['GET'])
+def wishlist():
+    user_id = session.get('user_id')
+    if not user_id:
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("""
+        SELECT inventory.id, inventory.name AS product_name, inventory.image, inventory.description, inventory.price 
+        FROM wishlist 
+        JOIN inventory ON wishlist.product_id = inventory.id 
+        WHERE wishlist.user_id = %s
+    """, (user_id,))
+    
+    wishlist_products = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    return render_template('wishlist.html', wishlist_products=wishlist_products)
+@app.route('/add_to_wishlist/<int:product_id>', methods=['POST'])
+def add_to_wishlist(product_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    # Check if the product is already in the wishlist
+    cursor.execute(
+        "SELECT COUNT(*) as count FROM wishlist WHERE product_id = %s AND user_id = %s",
+        (product_id, user_id)
+    )
+    result = cursor.fetchone()
+
+    if result["count"] > 0:
+        # Remove from wishlist
+        cursor.execute(
+            "DELETE FROM wishlist WHERE product_id = %s AND user_id = %s",
+            (product_id, user_id)
+        )
+    else:
+        # Add to wishlist
+        cursor.execute(
+            "INSERT INTO wishlist (user_id, product_id) VALUES (%s, %s)",
+            (user_id, product_id)
+        )
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return redirect(url_for('index'))  # Redirect back to home page
+
+@app.route('/remove_from_wishlist/<int:product_id>', methods=['POST'])
+def remove_from_wishlist(product_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute(
+        "DELETE FROM wishlist WHERE product_id = %s AND user_id = %s",
+        (product_id, user_id)
+    )
+    conn.commit()
+    
+    cursor.close()
+    conn.close()
+
+    flash("Item removed from wishlist", "success")
+    return redirect(url_for('wishlist'))
 
 if __name__ == '__main__':
     initialize_database()

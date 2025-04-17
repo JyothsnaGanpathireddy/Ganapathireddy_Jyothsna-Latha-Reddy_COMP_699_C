@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Wishlist</title>
+    
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Arial', sans-serif;
+        }
+        .wishlist-container {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: rgb(198, 205, 117);
+            border-radius: 12px;
+            box-shadow: 0px 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        .product-card {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #ddd;
+            background: #fdffe1;
+            border-radius: 8px;
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            margin-bottom: 10px;
+        }
+        .product-card:hover {
+            transform: scale(1.02);
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.15);
+        }
+        .product-card img {
+            width: 120px;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 10px;
+            margin-right: 20px;
+            border: 3px solid #eee;
+        }
+        .product-info {
+            flex-grow: 1;
+        }
+        .product-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+        .product-description {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .product-price {
+            font-size: 16px;
+            font-weight: bold;
+            color: #28a745;
+            margin-top: 5px;
+        }
+        .remove-btn {
+            border: none;
+            background: none;
+            color: red;
+            font-size: 16px;
+            cursor: pointer;
+            transition: color 0.2s ease-in-out;
+        }
+        .remove-btn:hover {
+            color: darkred;
+        }
+        .empty-message {
+            text-align: center;
+            font-size: 18px;
+            color: #666;
+            padding: 20px;
+        }
+        .back-btn {
+            display: block;
+            width: 100%;
+            text-align: center;
+            font-size: 16px;
+            padding: 10px;
+            background: #105334;
+            color: rgb(255, 255, 255);
+            border-radius: 8px;
+            text-decoration: none;
+            transition: background 0.3s ease-in-out;
+        }
+        .back-btn:hover {
+            background: #1cab74;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="wishlist-container">
+            <h2 class="text-center mb-4">Your Wishlist</h2>
+
+            {% if wishlist_products %}
+                {% for product in wishlist_products %}
+                    <div class="product-card">
+                        <img src="{{ url_for('static', filename='product-images/' + product['image'].lstrip('images/')) }}" 
+                        alt="{{ product['name'] }}" class="card-img-top">
+                   
+                        <div class="product-info">
+                            <div class="product-title">{{ product['name'] }}</div>
+                            <div class="product-description">{{ product['description'] }}</div>
+                            <div class="product-price">Price: Rs {{ product['price'] }}</div>
+                        </div>
+
+                        <!-- Remove from Wishlist Button -->
+                        <form action="{{ url_for('remove_from_wishlist', product_id=product['id']) }}" method="POST">
+                            <button type="submit" class="remove-btn">
+                                <i class="fas fa-trash-alt"></i> Remove
+                            </button>
+                        </form>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p class="empty-message">Your wishlist is empty. Start adding your favorite products!</p>
+            {% endif %}
+
+            <div class="text-center mt-4">
+                <a href="{{ url_for('index') }}" class="back-btn">Back to Shopping</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
