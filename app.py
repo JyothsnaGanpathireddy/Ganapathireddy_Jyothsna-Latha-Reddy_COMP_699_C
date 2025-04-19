@@ -1,18 +1,54 @@
-from flask import Flask, render_template, request, redirect, url_for, session
-from werkzeug.security import generate_password_hash, check_password_hash
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 import mysql.connector
-from werkzeug.utils import secure_filename
+import datetime
+from werkzeug.security import generate_password_hash, check_password_hash
 import os
+
+from werkzeug.utils import secure_filename
+
+from dotenv import load_dotenv
+import datetime
+from datetime import datetime, date
 import smtplib
 import random
 import string
-import datetime
-from datetime import datetime, date
-
-app = Flask(__name__)
-
-
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+load_dotenv()
+from flask_cors import CORS
+from passlib.context import CryptContext
+import json
 import mysql.connector
+from datetime import datetime, timedelta
+import random
+from flask_mail import Mail, Message
+
+app = Flask(__name__, static_url_path='/static')
+CORS(app)
+
+app.secret_key = 'grocery1230932rjdbsjdaskasbjkfaf'
+app.config['UPLOAD_FOLDER'] = 'static/images'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+
+
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+load_dotenv()
+
+app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER')
+app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT', 587))
+app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS') == 'True'
+app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
+app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER')
+
+
+otp_data = {}
+
+sender_email = os.getenv("EMAIL_ADDRESS")
+sender_password = os.getenv("EMAIL_PASSWORD")
 
 def create_database_if_not_exists():
     # First connect to MySQL without specifying a database
@@ -223,6 +259,34 @@ def forgot_password():
 
     return render_template('forgot_password.html')
 
+# Initialize the Flask-Mail object
+mail = Mail(app)
+
+
+def send_email_otp(to_email, otp):
+    try:
+        subject = "Your OTP Code"
+        body = f"Your OTP code is: {otp}. It is valid for 3 minutes."
+        
+        msg = Message(
+            subject=subject,
+            recipients=[to_email],  # Recipient's email
+            body=body  # Body content of the email
+        )
+        
+        # Send the email
+        mail.send(msg)
+        print("OTP sent successfully!")
+    except Exception as e:
+        print(f"Error: {e}")
+
+@app.before_request
+def ensure_quantities_in_session():
+    if 'quantities' not in session:
+        session['quantities'] = {}
+
+
+
 @app.route('/verify-otp', methods=['GET', 'POST'])
 def verify_otp():
     if request.method == 'POST':
@@ -295,6 +359,25 @@ def admin_dashboard():
                            total_users=total_users, 
                            total_orders=total_orders, 
                            total_inventory=total_inventory)
+
+@app.route('/delete_user/<int:user_id>', methods=['POST'])
+def delete_user(user_id):
+    delete_user_by_id(user_id)  # Delete user by ID
+    return redirect(url_for('users'))  # Redirect to user list after deletion
+
+def delete_user_by_id(user_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+    conn.commit()  # Commit the changes
+    cursor.close()
+    conn.close()
+
+@app.route('/total_orders')
+def total_orders():
+    # Fetch total orders data (replace this with actual logic)
+    total_orders = get_total_orders()
+    return render_template('admin_dashboard.html', total_orders=total_orders)
 
 @app.route('/users')
 def users():
@@ -402,6 +485,52 @@ def create_password():
 
     return render_template('create_password.html')
 
+
+@app.route('/update_order_status', methods=['POST'])
+def update_order_status():
+    if 'email' not in session:
+        return redirect(url_for('login'))
+    
+    try:
+        order_id = request.form.get('order_id')
+        new_status = request.form.get('status')
+
+        if not order_id or not new_status:
+            flash('Invalid data provided.', 'warning')
+            return redirect(url_for('myorder'))
+        
+        db = get_db_connection()
+        cursor = db.cursor(dictionary=True)
+        
+        # Update the status of the order
+        cursor.execute(
+            """
+            UPDATE orders 
+            SET status = %s 
+            WHERE order_id = %s
+            """,
+            (new_status, order_id)
+        )
+        
+        db.commit()
+        cursor.close()
+        db.close()
+        
+        flash('Order status updated successfully!', 'success')
+    except Exception as e:
+        print(f"Error updating order status: {e}")
+        flash('Failed to update order status.', 'danger')
+    
+    return redirect(url_for('myorder'))
+
+@app.route('/filter_products', methods=['GET', 'POST'])
+def filter_products():
+    if request.method == 'POST':
+        # Handle form data and apply the filter
+        category = request.form.get('category')
+        # Your filtering logic here
+    return redirect(url_for('index'))
+
 @app.route('/resend-otp', methods=['POST'])
 def resend_otp():
     temp_user = session.get('temp_user')
@@ -465,8 +594,6 @@ def add_inventory():
 
         return redirect(url_for('inventory_list'))
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
     
 @app.route('/inventory/edit/<int:id>', methods=['GET', 'POST'])
 def edit_inventory(id):
@@ -514,6 +641,52 @@ def get_total_inventory():
     cursor.close()
     db.close()
     return total_inventory
+
+# Helper function to get expired items count
+def get_expired_items():
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT COUNT(*) as expired_items FROM inventory WHERE expiration_date < CURDATE()")
+    expired_items = cursor.fetchone()['expired_items']
+    cursor.close()
+    db.close()
+    return expired_items
+def get_total_users():
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT COUNT(*) as total_users FROM users")
+    total_users = cursor.fetchone()['total_users']
+    cursor.close()
+    db.close()
+    return total_users
+@app.route('/get_inventory')
+def get_inventory():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, price, image, category, description FROM inventory")  # Include 'description'
+        items = cursor.fetchall()
+        conn.close()
+    
+        inventory_list = [{"id": row[0], "name": row[1], "price": row[2], "category": row[3], "image": row[4], "description": row[5]} for row in items]  # Add 'description' to the dictionary
+        
+        print(inventory_list)  # This should print the list if the connection works
+        
+        return jsonify(inventory_list)
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({"error": "Something went wrong"}), 500
+
+
+# Helper function to get total number of orders
+def get_total_orders():
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT COUNT(*) as total_orders FROM orders")
+    total_orders = cursor.fetchone()['total_orders']
+    cursor.close()
+    db.close()
+    return total_orders
 
 @app.route('/inventory/delete/<int:item_id>', methods=['GET'])
 def delete_inventory(item_id):
@@ -609,6 +782,18 @@ def edit_order(order_id):
     connection.close()
 
     return render_template('edit_order.html', order=order)
+
+def send_delivery_email(to_email, user_name, product_name, order_id):
+    try:
+        msg = Message(
+            f"Order #{order_id} Delivered!",
+            recipients=[to_email]
+        )
+        msg.body = f"Hello {user_name},\n\nYour order for {product_name} has been successfully delivered!\nThank you for shopping with us.\n\nBest Regards,\nFresh Grocery"
+        mail.send(msg)
+        print(f"Delivery email sent to {to_email}")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
 
 @app.route('/myorder')
 def myorder():
@@ -759,6 +944,7 @@ def profile():
 
 
     return render_template('profile.html', user=user)
+
 
 
 
@@ -1079,6 +1265,235 @@ def remove_from_wishlist(product_id):
 
     flash("Item removed from wishlist", "success")
     return redirect(url_for('wishlist'))
+
+
+@app.route('/admin/reviews')
+def admin_reviews():
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)  # Use dictionary=True to get column names as keys
+    cursor.execute("""
+        SELECT r.id AS review_id, r.product_id, r.user AS user_email, 
+               r.content, r.rating
+        FROM reviews r
+    """)
+    reviews = cursor.fetchall()
+    cursor.close()
+    connection.close()
+    return render_template('admin_reviews.html', reviews=reviews)
+
+
+# Route to edit a review
+@app.route('/edit_review/<int:review_id>', methods=['POST'])
+def edit_review(review_id):
+    content = request.form['content']
+    rating = request.form['rating']
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    cursor.execute('UPDATE reviews SET content = %s, rating = %s WHERE id = %s',
+                   (content, rating, review_id))
+    connection.commit()
+    connection.close()
+    flash('Review updated successfully!', 'success')
+    return redirect(url_for('admin_reviews'))
+
+# Route to delete a review
+@app.route('/delete_review/<int:review_id>', methods=['POST'])
+def delete_review(review_id):
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    cursor.execute('DELETE FROM reviews WHERE id = %s', (review_id,))
+    connection.commit()
+    connection.close()
+    flash('Review deleted successfully!', 'danger')
+    return redirect(url_for('admin_reviews'))
+
+def fetch_reviews_from_db():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute('SELECT * FROM reviews')
+    reviews = cursor.fetchall()
+    conn.close()
+    return reviews
+
+@app.route('/logout')
+def logout():
+    session.pop('email', None)  # Remove the session variable
+    flash('You have been logged out.', 'success')
+    return redirect(url_for('index'))
+
+
+@app.route('/cancel_order/<int:order_id>', methods=['POST'])
+def cancel_order(order_id):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+    user_id = session.get('user_id')
+
+    # Fetch the order and validate ownership
+    cursor.execute("""
+        SELECT o.order_id, o.status, o.product_id, o.quantity, i.name AS product_name, u.email 
+        FROM orders o 
+        JOIN inventory i ON o.product_id = i.id 
+        JOIN users u ON o.user_id = u.id 
+        WHERE o.order_id = %s AND o.user_id = %s
+    """, (order_id, user_id))
+    
+    order = cursor.fetchone()
+
+    if not order:
+        flash('Order not found or access denied!', 'danger')
+        return redirect(url_for('myorder'))
+    
+    if order['status'] in ['Delivered', 'Cancelled']:
+        flash('Order cannot be cancelled as it is already delivered or cancelled!', 'warning')
+        return redirect(url_for('myorder'))
+
+    # Update the order status to 'Cancelled' in the database
+    try:
+        cursor.execute("""
+            UPDATE orders SET status = 'Cancelled', delivery_date = %s WHERE order_id = %s
+        """, (datetime.now(), order_id))
+        db.commit()
+
+        flash('Order cancelled successfully!', 'success')
+
+        # Send cancellation email to the user
+        try:
+            msg = Message('Order Cancellation - Fresh Groceries',
+                          recipients=[order['email']])
+            msg.body = f"""
+            Dear Customer,
+
+            Your order for '{order['product_name']}' has been cancelled successfully.
+
+            If you have any questions, please contact our support team.
+
+            Regards,
+            Fresh Groceries Team
+            """
+            mail.send(msg)
+            flash('Cancellation email sent successfully!', 'success')
+        except Exception as e:
+            print("Error sending email:", e)
+            flash('Failed to send cancellation email.', 'danger')
+
+    except Exception as e:
+        db.rollback()
+        flash('Failed to cancel the order. Please try again.', 'danger')
+        print("Error updating order status:", e)
+
+    cursor.close()
+    db.close()
+    
+    return redirect(url_for('myorder'))
+
+@app.route('/send-email', methods=['POST'])
+def send_email():
+    try:
+        data = request.get_json()
+
+        name = data.get('name')
+        number = data.get('number')
+        email = data.get('email')
+        medicine = data.get('medicine')
+        cost = data.get('cost')
+
+    
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+  
+        cursor.execute("""
+            INSERT INTO sales (name, number, email, medicine, cost)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (name, number, email, medicine, cost))
+
+ 
+        connection.commit()
+
+       
+        cursor.close()
+        connection.close()
+
+        subject = "Billing Details"
+        body = f"""
+        Dear {name},
+
+        Here are your billing details:
+
+        - Name: {name}
+        - Number: {number}
+        - Medicine Name: {medicine}
+        - Cost: ₹{cost}
+
+        Regards,
+        Horsonda Pharmacy
+        """
+
+        msg = MIMEMultipart()
+        msg['From'] = sender_email
+        msg['To'] = email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain'))
+
+        try:
+            server = smtplib.SMTP("smtp.gmail.com", 587)
+            server.starttls()
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, email, msg.as_string())
+            server.quit()
+
+            return jsonify({"status": "success", "message": "Email sent successfully and sale saved!"})
+
+        except Exception as e:
+            return jsonify({"status": "error", "message": f"Email failed to send: {str(e)}"})
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Failed to save sale: {str(e)}"})
+
+
+def send_email(to_email, subject, body):
+    msg = MIMEMultipart()
+    msg['From'] = sender_email
+    msg['To'] = to_email
+    msg['Subject'] = subject
+    msg.attach(MIMEText(body, 'plain'))
+
+    try:
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
+        server.login(sender_email, sender_password)
+        server.sendmail(sender_email, to_email, msg.as_string())
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
+
+
+@app.route('/get-total-inventory', methods=['GET'])
+def get_total_inventory():
+    try:
+      
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+     
+        cursor.execute("SELECT COUNT(*) FROM inventory")
+        result = cursor.fetchone()
+
+       
+        cursor.close()
+        connection.close()
+
+   
+        return jsonify({"total_inventory": result[0]})
+
+    except Exception as e:
+        print("Error:", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == '__main__':
     initialize_database()

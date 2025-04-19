@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Reviews</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <!-- Back Button -->
+        <div class="mb-3">
+            <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">
+                ← Back to Admin Dashboard
+            </a>
+        </div>
+
+        <h2 class="mb-4">Admin Reviews</h2>
+
+        <!-- Display Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-message">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <!-- Reviews Table -->
+        <div class="card">
+            <div class="card-body">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                           
+                            <th>Product ID</th>
+                      
+                            <th>User Email</th>
+                            <th>Review Content</th>
+                            <th>Rating</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for review in reviews %}
+                            <tr>
+                              
+                                <td>{{ review['product_id'] }}</td>
+                     
+                                <td>{{ review['user_email'] }}</td>
+                                <td>{{ review['content'] }}</td>
+                                <td>{{ review['rating'] }}</td>
+                                <td>
+                                    <!-- Edit Button to Trigger Modal -->
+                                    <button type="button" class="btn btn-primary btn-sm" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#editReviewModal{{ review['review_id'] }}">
+                                        Edit
+                                    </button>
+
+                                    <!-- Delete Button -->
+                                    <form action="{{ url_for('delete_review', review_id=review['review_id']) }}" 
+                                          method="POST" style="display:inline;">
+                                        <button type="submit" class="btn btn-danger btn-sm">
+                                            Delete
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+
+                            <!-- Edit Modal -->
+                            <div class="modal fade" id="editReviewModal{{ review['review_id'] }}" 
+                                 tabindex="-1" aria-labelledby="editReviewModalLabel" aria-hidden="true">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                           
+                                            <button type="button" class="btn-close" 
+                                                    data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <form action="{{ url_for('edit_review', review_id=review['review_id']) }}" 
+                                                  method="POST">
+                                                <div class="mb-3">
+                                                    <label for="content{{ review['review_id'] }}" class="form-label">
+                                                        Review Content
+                                                    </label>
+                                                    <textarea class="form-control" 
+                                                              id="content{{ review['review_id'] }}" 
+                                                              name="content" rows="3" required>
+                                                        {{ review['content'] }}
+                                                    </textarea>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label for="rating{{ review['review_id'] }}" class="form-label">
+                                                        Rating (1-5)
+                                                    </label>
+                                                    <input type="number" class="form-control" 
+                                                           id="rating{{ review['review_id'] }}" 
+                                                           name="rating" min="1" max="5" 
+                                                           value="{{ review['rating'] }}" required>
+                                                </div>
+                                                <button type="submit" class="btn btn-success">
+                                                    Save Changes
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
