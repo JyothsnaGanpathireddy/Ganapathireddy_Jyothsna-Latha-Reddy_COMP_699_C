@@ -1,0 +1,145 @@
+body {
+    background-color: #ecf1cd;
+}
+
+.sidebar {
+    width: 250px;
+    height: 100vh;
+    margin-top: 60px;
+    position: fixed;
+    left: -250px;
+    top: 0;
+    background: #080808;
+    color: white;
+    transition: 0.3s;
+    padding-top: 20px;
+    z-index: 998;
+}
+
+.sidebar a {
+    display: block;
+    padding: 10px 20px;
+    color: white;
+    text-decoration: none;
+}
+
+.sidebar a:hover {
+    color: #e58619;
+}
+
+.sidebar.active {
+    left: 0;
+}
+
+.navbar {
+    background-color: #020202;
+}
+
+.navbar-brand {
+    color: white;
+    font-size: 1.5rem;
+}
+
+.search-box {
+    flex-grow: 1;
+    margin-left: 20px;
+    max-width: 400px;
+}
+
+.logout-btn {
+    color: white;
+    text-decoration: none;
+}
+
+.logout-btn:hover {
+    color: #f8d7da;
+}
+
+.content {
+    margin-left: 0;
+    transition: margin-left 0.3s;
+    padding: 20px;
+    z-index: 1;
+}
+
+.content.shifted {
+    margin-left: 250px;
+}
+
+.toggle-btn {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.5rem;
+    margin-left: 10px;
+    z-index: 999;
+    position: relative;
+}
+
+
+
+/* Base card styles */
+.card {
+ border-radius: 10px;
+ transition: transform 0.3s ease, box-shadow 0.3s ease;
+ box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+ background: linear-gradient(135deg, #66aaed, #a9e39b);
+ border: none;
+}
+
+.card-body {
+ padding: 20px;
+ text-align: center;
+}
+
+/* Card Titles */
+.card-title {
+ font-weight: bold;
+ font-size: 1.2rem;
+ margin-bottom: 5px;
+ color: #333;
+}
+
+/* Link Styles */
+.text-decoration-none {
+ display: block;
+ transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Hover Effect */
+.text-decoration-none:hover .card {
+ transform: translateY(-5px);
+ box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* Specific Card Colors */
+a[href*='add_inventory'] .card {
+ background-color: #28a745;
+ /* Green */
+ color: white;
+}
+
+a[href*='inventory_list'] .card {
+ background-color: #007bff;
+ /* Blue */
+ color: white;
+}
+
+a[href*='edit_inventory'] .card {
+ background-color: #ffc107;
+ /* Yellow */
+ color: black;
+}
+
+/* Hover Effects for each card */
+a[href*='add_inventory']:hover .card {
+ background-color: #218838;
+}
+
+a[href*='inventory_list']:hover .card {
+ background-color: #0056b3;
+}
+
+a[href*='edit_inventory']:hover .card {
+ background-color: #e0a800;
+}

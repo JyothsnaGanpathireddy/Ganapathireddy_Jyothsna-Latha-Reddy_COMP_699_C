@@ -1,0 +1,35 @@
+
+.navbar-brand {
+    margin-left: 30px;
+    font-size: 24px;
+    color: white;
+    font-weight: 700;
+}
+
+.navbar-nav .nav-link {
+    color: white;
+    font-weight: 500;
+}
+
+.navbar-nav .nav-link:hover {
+    color: orange;
+}
+
+
+body{
+    background-color: #8e44ad;
+}
+
+
+.card {
+    border-radius: 45px;
+    width: 400px;
+}
+
+.card-header {
+    background-color: #f8f9fa;
+}
+
+.card-body {
+    background-color: #ffffff;
+}
