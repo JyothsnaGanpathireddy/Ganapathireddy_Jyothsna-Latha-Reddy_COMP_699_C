@@ -1,0 +1,11 @@
+Flask
+flask-cors
+flask-mail
+python-dotenv
+mysql-connector-python
+passlib
+Werkzeug
+itsdangerous
+click
+Jinja2
+email-validator

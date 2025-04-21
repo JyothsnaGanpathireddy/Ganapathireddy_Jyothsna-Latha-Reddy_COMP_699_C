@@ -1,14 +1,10 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
-import mysql.connector
 import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
-
+import mysql.connector
 from werkzeug.utils import secure_filename
-
 from dotenv import load_dotenv
-import datetime
-from datetime import datetime, date
 import smtplib
 import random
 import string
@@ -18,10 +14,10 @@ load_dotenv()
 from flask_cors import CORS
 from passlib.context import CryptContext
 import json
-import mysql.connector
 from datetime import datetime, timedelta
 import random
 from flask_mail import Mail, Message
+from passlib.hash import scrypt
 
 app = Flask(__name__, static_url_path='/static')
 CORS(app)
@@ -72,7 +68,7 @@ def get_db_connection():
         port=3306,
         user="root",
         password="root@123",
-        database="grocery_db1"
+        database="grocery_db"
     )
 
 def initialize_database():
@@ -95,11 +91,6 @@ def initialize_database():
     cursor.close()
     conn.close()
     print("Tables created if not exist.")
-
-
- # @app.route('/')
- # def home():
-    # return "Hello, Flask!"
 
 @app.route('/', methods=['GET'])
 def index():
@@ -176,11 +167,11 @@ def login():
             
             print(f"User {user['email']} logged in with ID {user['id']} and Username {user['name']}")
 
-            if user['email'] == 'kandranaveen650@gmail.com':
+            if user['email'] == 'jyothsnalatha2002@gmail.com':
                 return redirect(url_for('admin_dashboard'))  
             else:
                 flash('Login successful!', 'success')
-                return redirect(url_for('home'))  
+                return redirect(url_for('index'))  
         else:
             flash('Invalid credentials. Please try again.', 'danger')
 
