@@ -55,11 +55,11 @@ def create_database_if_not_exists():
         password="root@123"
     )
     cursor = conn.cursor()
-    cursor.execute("CREATE DATABASE IF NOT EXISTS grocery_db1")
+    cursor.execute("CREATE DATABASE IF NOT EXISTS grocery_db")
     conn.commit()
     cursor.close()
     conn.close()
-    print("Database 'grocery_db1' ensured.")
+    print("Database 'grocery_db' ensured.")
 
 def get_db_connection():
     # Now connect to the actual DB
@@ -168,7 +168,7 @@ def login():
             print(f"User {user['email']} logged in with ID {user['id']} and Username {user['name']}")
 
             if user['email'] == 'jyothsnalatha2002@gmail.com':
-                return redirect(url_for('admin_dashboard'))  
+                return redirect(url_for('admin_dashboard'))
             else:
                 flash('Login successful!', 'success')
                 return redirect(url_for('index'))  
